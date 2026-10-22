@@ -8,7 +8,7 @@
 
 ## 安装
 
-以下快照绑定 API 属于尚未发布的 0.3.0。本地检出后使用 `python -m pip install -e '.[pydantic-ai]'`；正式发布后可从 PyPI 安装：
+从 PyPI 安装：
 
 ```bash
 python -m pip install skiva-sdk==0.3.0

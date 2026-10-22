@@ -2,7 +2,7 @@
 
 English · [简体中文](CHANGELOG.zh-CN.md)
 
-## 0.3.0 — Unreleased
+## 0.3.0 — 2026-10-22
 
 - Add optional SQLite binding persistence, atomic publication conflict checks and bounded conditional manifest caching.
 - Add client-local named snapshot bindings: `snapshot(id)`, `task(id)` alias and explicit cleanup.

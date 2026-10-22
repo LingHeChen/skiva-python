@@ -8,7 +8,7 @@ Async Python SDK for Skiva's `/distribution/v1` protocol. Python 3.11+. Package 
 
 ## Install
 
-The snapshot binding API below targets unreleased 0.3.0. For this checkout, install with `python -m pip install -e '.[pydantic-ai]'`. After release, install from PyPI:
+Install from PyPI:
 
 ```bash
 python -m pip install skiva-sdk==0.3.0
