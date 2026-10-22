@@ -120,7 +120,7 @@ class SkivaClient:
                         )
                         if not isinstance(code, str) or len(code) > 64:
                             code = "FORBIDDEN"
-                    except (ValueError, AttributeError):
+                    except (ValueError, AttributeError, RecursionError):
                         code = "FORBIDDEN"
                     if code == "CLIENT_FORBIDDEN":
                         self._revoked = True
@@ -145,7 +145,7 @@ class SkivaClient:
         )
         try:
             data = json.loads(raw)
-        except (ValueError, UnicodeError) as e:
+        except (ValueError, UnicodeError, RecursionError) as e:
             raise ProtocolError("Invalid manifest JSON") from e
         result = Manifest.parse(data, self.limits)
         if snapshot_id is not None and result.snapshot_id != snapshot_id:
