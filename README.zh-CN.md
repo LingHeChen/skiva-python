@@ -1,19 +1,19 @@
 # Skiva Python SDK
 
-[English](README.md) · 简体中文
+[English](https://github.com/LingHeChen/skiva-python/blob/main/README.md) · 简体中文
 
-基于 Skiva `/distribution/v1` 协议的异步 Python SDK，要求 Python 3.11+。安装包名 `skiva-sdk`，导入名 `skiva_sdk`。当前仓库提供 0.1.0 实现，尚未发布到 PyPI。
+基于 Skiva `/distribution/v1` 协议的异步 Python SDK，要求 Python 3.11+。安装包名 `skiva-sdk`，导入名 `skiva_sdk`。当前版本：0.1.0。
 
 [GitHub 仓库](https://github.com/LingHeChen/skiva-python) · [Skiva 服务端](https://github.com/LingHeChen/skiva)
 
 ## 安装
 
-在本目录执行：
+从 PyPI 安装：
 
 ```bash
-python -m pip install .
+python -m pip install skiva-sdk==0.1.0
 # 可选框架适配，已针对 Pydantic AI 2.59.0 验证：
-python -m pip install '.[pydantic-ai]'
+python -m pip install 'skiva-sdk[pydantic-ai]==0.1.0'
 ```
 
 使用**启用的 Agent Profile 所属客户端凭据**，不能使用管理员或登录会话令牌。地址填写服务端地址或反向代理前缀，不包含 `/distribution/v1`。可信本地环境之外使用 HTTPS。
@@ -129,6 +129,6 @@ uv run python examples/offline_demo.py
 
 测试使用受控分发服务和真实 Pydantic `FunctionModel` 执行循环，不调用外部模型。覆盖更新、回滚、同快照权限变化、并发读取和执行、历史内容版本、损坏、目录隔离及 Go 生成的清单兼容样例。离线演示不需要服务端或凭据；不能替代与实际部署和模型供应商的联调验收。
 
-参见 [examples/](examples/) 和 [CHANGELOG.zh-CN.md](CHANGELOG.zh-CN.md)。官方集成依据：[Pydantic capabilities](https://pydantic.dev/docs/ai/capabilities/custom/)、[Agent Skills 实现指南](https://agentskills.io/client-implementation/adding-skills-support)。
+参见 [examples/](https://github.com/LingHeChen/skiva-python/tree/main/examples/) 和 [CHANGELOG.zh-CN.md](https://github.com/LingHeChen/skiva-python/blob/main/CHANGELOG.zh-CN.md)。官方集成依据：[Pydantic capabilities](https://pydantic.dev/docs/ai/capabilities/custom/)、[Agent Skills 实现指南](https://agentskills.io/client-implementation/adding-skills-support)。
 
-完整场景和结果记录：[测试指南](docs/TESTING.zh-CN.md)。
+完整场景和结果记录：[测试指南](https://github.com/LingHeChen/skiva-python/blob/main/docs/TESTING.zh-CN.md)。

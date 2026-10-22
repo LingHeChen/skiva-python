@@ -1,19 +1,19 @@
 # Skiva Python SDK
 
-English · [简体中文](README.zh-CN.md)
+English · [简体中文](https://github.com/LingHeChen/skiva-python/blob/main/README.zh-CN.md)
 
-Async Python SDK for Skiva's `/distribution/v1` protocol. Python 3.11+. Package name: `skiva-sdk`; import: `skiva_sdk`. Version 0.1.0 is available in this repository; it has not been published to PyPI.
+Async Python SDK for Skiva's `/distribution/v1` protocol. Python 3.11+. Package name: `skiva-sdk`; import: `skiva_sdk`. Version: 0.1.0.
 
 [GitHub repository](https://github.com/LingHeChen/skiva-python) · [Skiva server](https://github.com/LingHeChen/skiva)
 
 ## Install
 
-From this directory:
+Install from PyPI:
 
 ```bash
-python -m pip install .
+python -m pip install skiva-sdk==0.1.0
 # Optional framework adapter, tested against exactly Pydantic AI 2.59.0:
-python -m pip install '.[pydantic-ai]'
+python -m pip install 'skiva-sdk[pydantic-ai]==0.1.0'
 ```
 
 Use a **client credential assigned to an enabled Agent Profile**, not an admin/API session token. Use the server origin (or reverse-proxy prefix), without `/distribution/v1`. Use HTTPS outside a trusted local environment.
@@ -130,6 +130,6 @@ uv run python examples/offline_demo.py
 
 Tests use a controlled distribution fixture and Pydantic's actual `FunctionModel` agent loop, without external model calls. They cover updates/rollback, same-snapshot permission changes, concurrent reads/runs, old-content provenance, corruption, export isolation, and Go-generated manifest fixtures. The offline demo requires no server or credentials. It is not a substitute for deployment acceptance against your Skiva server and selected model provider.
 
-See [examples/](examples/) and [CHANGELOG.md](CHANGELOG.md). Official integration references: [Pydantic capabilities](https://pydantic.dev/docs/ai/capabilities/custom/), [Agent Skills implementation guide](https://agentskills.io/client-implementation/adding-skills-support).
+See [examples/](https://github.com/LingHeChen/skiva-python/tree/main/examples/) and [CHANGELOG.md](https://github.com/LingHeChen/skiva-python/blob/main/CHANGELOG.md). Official integration references: [Pydantic capabilities](https://pydantic.dev/docs/ai/capabilities/custom/), [Agent Skills implementation guide](https://agentskills.io/client-implementation/adding-skills-support).
 
-Detailed scenarios and recorded results: [Testing guide](docs/TESTING.md).
+Detailed scenarios and recorded results: [Testing guide](https://github.com/LingHeChen/skiva-python/blob/main/docs/TESTING.md).
