@@ -2,6 +2,15 @@
 
 English · [简体中文](CHANGELOG.zh-CN.md)
 
+## 0.3.0 — Unreleased
+
+- Add optional SQLite binding persistence, atomic publication conflict checks and bounded conditional manifest caching.
+- Add client-local named snapshot bindings: `snapshot(id)`, `task(id)` alias and explicit cleanup.
+- Reuse bindings across retries; opt into latest on entry while keeping the whole view fixed.
+- Reject conflicting concurrent bindings and bound retained IDs without implicit eviction.
+- Pydantic AI accepts `SnapshotView` directly as dependencies.
+- Dynamic access checks updates by default (`refresh_interval=0`, previously 5 seconds).
+
 ## 0.2.0 — 2026-10-22
 
 - Behavior change: ordinary bindings now default to dynamic updates; opt into pinned explicitly.

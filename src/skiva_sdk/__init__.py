@@ -11,14 +11,18 @@ from .errors import (
     ProtocolError,
     SkillNotFound,
     SkivaError,
+    SnapshotBusy,
     TransportError,
     VersionMismatch,
 )
 from .protocol import Limits, RetryCheckpoint, SnapshotRef
+from .store import BindingStore, SQLiteBindingStore
 from .view import SkillSession, SnapshotView
 
 __all__ = [
     "AuthorizationDenied",
+    "BindingStore",
+    "SQLiteBindingStore",
     "Catalog",
     "ClosedError",
     "Consistency",
@@ -35,6 +39,7 @@ __all__ = [
     "SkillContent",
     "SkillNotFound",
     "SkillSession",
+    "SnapshotBusy",
     "SnapshotRef",
     "SnapshotView",
     "TransportError",

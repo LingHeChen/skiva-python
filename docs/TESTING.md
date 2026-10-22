@@ -57,3 +57,11 @@ The expanded suite found a real defect: a pinned binding retained `last_refresh_
 ## 0.2.0 retry policy regression
 
 Python 3.12.10 local validation: **118 passed**, combined statement/branch coverage **95.44%**. `test_retry.py` covers dynamic defaults, fixed default retries, latest retries and rollback, client overrides, persisted checkpoints, authorization failures, failed refresh checkpoints, and concurrent attempt isolation. The Pydantic AI tests also verify that retry policy selects the model's discovery catalog. No live model calls are used.
+
+## 0.3.0 named snapshot regression
+
+Local Python 3.12: 138 tests passed; combined statement/branch coverage 95.78%. Added same-ID reuse, explicit latest, cancellation recovery, capacity limits, concurrent conflicts, permission changes and Pydantic AI discovery/tool calls using SnapshotView.
+
+## Persistence and conditional requests
+
+143 local tests passed; combined coverage 95.90%. Covers separate-process persistence, namespace isolation, atomic conflicts, capacity, SQLite lock contention, malformed references, 304 authorization and 503 recovery. Real Go/PostgreSQL/Python SDK integration also passed in the main repository; see its SDK_RUNTIME guide for commands.

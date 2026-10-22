@@ -46,3 +46,7 @@ class ManifestChanged(SkivaError):
 
 class SkillNotFound(SkivaError):
     pass
+
+
+class SnapshotBusy(SkivaError):
+    """A named snapshot binding is already active on this client."""

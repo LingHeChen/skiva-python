@@ -69,6 +69,14 @@ async def main():
             print("Default retry:", (await retry.catalog()).ref.snapshot_id)  # A
         async with client.retry(checkpoint, retry_policy="latest") as retry:
             print("Latest retry:", (await retry.catalog()).ref.snapshot_id)  # B
+        async with client.snapshot("review-42") as fixed:
+            print("Named snapshot:", fixed.ref.snapshot_id)  # B
+        head = "A"
+        async with client.snapshot("review-42") as fixed:
+            print("Same ID:", fixed.ref.snapshot_id)  # B
+        async with client.snapshot("review-42", retry_policy="latest") as fixed:
+            print("Explicit latest:", fixed.ref.snapshot_id)  # A
+        client.forget_snapshot("review-42")
 
 
 if __name__ == "__main__":

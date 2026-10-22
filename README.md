@@ -2,18 +2,18 @@
 
 English · [简体中文](https://github.com/LingHeChen/skiva-python/blob/main/README.zh-CN.md)
 
-Async Python SDK for Skiva's `/distribution/v1` protocol. Python 3.11+. Package name: `skiva-sdk`; import: `skiva_sdk`. Version: 0.2.0.
+Async Python SDK for Skiva's `/distribution/v1` protocol. Python 3.11+. Package name: `skiva-sdk`; import: `skiva_sdk`. Version: 0.3.0.
 
 [GitHub repository](https://github.com/LingHeChen/skiva-python) · [Skiva server](https://github.com/LingHeChen/skiva)
 
 ## Install
 
-Install from PyPI:
+The snapshot binding API below targets unreleased 0.3.0. For this checkout, install with `python -m pip install -e '.[pydantic-ai]'`. After release, install from PyPI:
 
 ```bash
-python -m pip install skiva-sdk==0.2.0
+python -m pip install skiva-sdk==0.3.0
 # Optional framework adapter, tested against exactly Pydantic AI 2.59.0:
-python -m pip install 'skiva-sdk[pydantic-ai]==0.2.0'
+python -m pip install 'skiva-sdk[pydantic-ai]==0.3.0'
 ```
 
 Use a **client credential assigned to an enabled Agent Profile**, not an admin/API session token. Use the server origin (or reverse-proxy prefix), without `/distribution/v1`. Use HTTPS outside a trusted local environment.
@@ -33,7 +33,7 @@ from skiva_sdk import SkivaClient
 
 async def main():
     async with SkivaClient.from_env() as client:
-        async with client.bind(task_id="review-42") as skills:
+        async with client.bind() as skills:
             catalog = await skills.catalog()
             print(catalog.render())
             if catalog.skills:
@@ -51,6 +51,17 @@ asyncio.run(main())
 
 The discovery prompt tells the model to compare snapshot IDs for equality, not chronological order, and to reload content whose version differs. Rollback is handled the same way as forward updates. `catalog_digest` also changes when the authorized file set changes within one snapshot. This is a model-facing fallback, **not a guarantee that old instructions are forgotten**.
 
+## Choose an interface
+
+| API | Behavior |
+|---|---|
+| `client.bind()` | Check the current authorized target on every access by default |
+| `client.snapshot()` | Fix the current snapshot on entry |
+| `client.snapshot("review-42")` | Remember and reuse a snapshot by application binding ID |
+| `client.snapshot(source=ref)` | Fix a specific actual snapshot reference |
+
+Use these two primary interfaces. `bind(consistency="pinned")` and `bind(source=ref)` remain lower-level compatibility options. `client.task(id)` is just an alias for `snapshot(id)`, not another mode.
+
 ## Fixed and dynamic policies
 
 ```python
@@ -63,7 +74,7 @@ async with client.bind(consistency="dynamic") as skills:
 ```
 
 - Opt-in `pinned`: one snapshot and filtered manifest for the binding. Future channel changes do not change it.
-- Default `dynamic`: reads/discovery reconcile on access after `refresh_interval` (default 5 seconds). `refresh()` forces reconciliation. No background daemon or SSE subscription.
+- Default `dynamic`: reads/discovery reconcile on access after `refresh_interval` (default 0 seconds: every access). `refresh()` forces reconciliation. No background daemon or SSE subscription.
 - An expected-version load forces dynamic reconciliation even before the interval expires. Snapshot or catalog mismatch raises `VersionMismatch`; no silent substitution.
 - A fully verified candidate replaces the active view atomically. Each operation captures one view; different operations can span versions. `snapshot()` captures one view for related operations, even while the enclosing dynamic session updates.
 - Refresh failure aborts that operation and populates `last_refresh_error`; it never silently reports stale discovery as fresh. Later successful refresh clears the error. `transition_count` counts successful view changes.
@@ -71,6 +82,52 @@ async with client.bind(consistency="dynamic") as skills:
 - `view.ref` in dynamic mode is a point-in-time observation. Use returned `SkillContent.ref` or `batch.ref` for provenance.
 
 Task/attempt IDs are optional correlation fields and auto-generated if absent. Duplicate active IDs are rejected **within one client**. There is no durable attempt store, automatic crash resume or cross-process exactly-once guarantee. Persist refs in your application's own storage for explicit pinned retries. A ref does not grant access and cannot bypass a new credential's permissions.
+
+## Named snapshot bindings
+
+```python
+# Default: check the current authorized target on each access.
+async with client.bind() as skills:
+    catalog = await skills.catalog()
+
+# First entry pins the current snapshot; re-entry reuses it.
+async with client.snapshot("review-42") as skills:
+    catalog = await skills.catalog()
+
+# Explicitly replace the binding with the latest authorized snapshot.
+# This new view stays fixed throughout this block, too.
+async with client.snapshot("review-42", retry_policy="latest") as skills:
+    catalog = await skills.catalog()
+
+client.forget_snapshot("review-42")
+```
+
+`client.snapshot(id)` is the primary fixed-view API. The string is an **application binding ID**, not a server snapshot UUID. `client.task(id)` is an alias only. Without an ID, `client.snapshot()` captures an anonymous fixed view. To select an actual snapshot reference, use `client.snapshot(source=ref)`.
+
+Bindings survive application exceptions and context exit, so retrying the same ID reuses the original snapshot by default. `retry_policy="latest"` replaces the recorded binding only after successful preparation; it does not enable dynamic changes inside the block. Current permissions are always checked. Denied or changed views fail instead of silently moving to latest.
+
+Without a `binding_store`, the mapping lives **only in this client instance**. Reuse a long-lived client across requests; separate clients, processes and restarts do not share bindings. Persist `SnapshotRef` in application storage and pass `source=ref` to recover across restarts. Concurrent contexts with the same ID raise `SnapshotBusy`; share the already opened view for parallel reads. The default capacity is 1,024 IDs (`max_snapshot_bindings`); call `forget_snapshot(id)` after completing work. Active bindings cannot be forgotten. Forgetting removes only the local mapping, not server snapshots or grants. There is no implicit eviction or expiry that could silently change a retry's version.
+
+## Optional durable bindings
+
+```python
+from skiva_sdk import SkivaClient, SQLiteBindingStore
+
+store = SQLiteBindingStore("bindings.sqlite", namespace="my-app/review-profile")
+async with SkivaClient.from_env(binding_store=store) as client:
+    async with client.snapshot("review-42") as skills:
+        catalog = await skills.catalog()
+        print(catalog.render())
+    # A later process using the same database/namespace recovers this binding.
+    # Explicit cleanup after the application no longer needs retries:
+    # client.forget_snapshot("review-42")
+```
+
+The default store is client-local memory. Opt into `SQLiteBindingStore` to recover IDs across instances, processes and restarts, always subject to online authorization. Use an application/Profile namespace; server URLs are separated automatically. Place the database in a protected local directory, not a network filesystem. It contains references, not credentials or Skill bodies.
+
+Publication uses atomic compare-and-set: a competing change during preparation raises `SnapshotBusy` instead of silently overwriting it. One client rejects overlapping contexts with the same ID; separate clients/processes may use their already fixed views concurrently. This is not a distributed execution lock. `latest` and deletion never mutate existing views; coordinate cleanup after all relevant executions finish. Records never expire implicitly; capacity applies per store namespace. Custom stores implement the atomic `get/put/delete` methods of `BindingStore`; methods should be fast local metadata operations.
+
+Manifest ETag caching is bounded to 16 entries and a total of `max_manifest_bytes`. Every use still contacts the server for authorization; outages and denials never fall back to cached authorization. Fixed snapshots are not offline mode.
 
 ## Retry policy is separate from update policy
 
@@ -103,22 +160,24 @@ Reusing a task ID with `bind()` does not infer a retry. The SDK does not automat
 ```python
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Caching
-from skiva_sdk import SkillSession
+from skiva_sdk import SnapshotView
 from skiva_sdk.integrations.pydantic_ai import SkivaSkills
 
 agent = Agent(
     model,  # Supply your configured Pydantic AI model/provider.
     name="skiva-agent",
-    deps_type=SkillSession,
+    deps_type=SnapshotView,
     capabilities=[Caching(), SkivaSkills()],
 )
 
 async with agent:
-    async with client.bind(consistency="dynamic") as skills:
+    async with client.snapshot("review-42") as skills:
         result = await agent.run("Review this change", deps=skills)
 ```
 
 `SkivaSkills` provides a named, dynamic discovery instruction part with **rewrite** semantics, evaluated before **every model request**. It explicitly refreshes the session at each request, bypassing the normal polling interval. It also registers `load_skill` and `read_skill_file`, requiring both expected version fields. Version mismatch/not-found become structured tool results; authorization/network failures abort rather than encourage stale fallback. It does not rewrite historical tool returns or erase derived conclusions. Provider wire placement of instructions depends on Pydantic AI and the provider.
+
+`SkivaSkills` accepts both `SkillSession` and `SnapshotView`. The example uses a fixed named view; for live updates use `deps_type=SkillSession` and `client.bind()`. A fixed view rechecks authorization without changing versions.
 
 Keep business dependencies with `SkivaSkills(get_session=lambda deps: deps.skills)`. Each run must receive its own session; the capability has no mutable run state. Attach one SkivaSkills capability per Agent (tool names are fixed). This is a dedicated discovery/tool integration, **not** a replacement for the native Harness `Skills` workspace backend. Shell/direct filesystem access is not intercepted. Configure application tracing in the host application; the SDK exports no prompts/tokens to an external telemetry service.
 
@@ -142,7 +201,7 @@ Every snapshot is fully downloaded and validated before publication: Go-compatib
 
 Every public read/catalog/export rechecks the explicit snapshot manifest online, even for cached bytes. Changed permissions invalidate a captured view; explicit credential revocation is sticky for that client instance. Network failure blocks the operation. No offline mode, transparent network retries, or model-task retries. An authorization race after the final check and previously delivered content cannot be undone. HTTP redirects are not followed; bearer tokens are not included in SDK error messages. Raw transport instrumentation can still expose credentials; configure logging accordingly. Environment proxy/CA settings are ignored by default (`trust_env=False`); opt in explicitly with `trust_env=True` if needed, and install `httpx[socks]` for SOCKS proxies. A custom HTTPX transport can supply application TLS/proxy settings.
 
-Useful errors: `VersionMismatch`, `ManifestChanged`, `AuthorizationDenied`, `IntegrityError`, `ProtocolError`, `LimitExceeded`, `SkillNotFound`, `TransportError`, `ClosedError`.
+Useful errors: `VersionMismatch`, `ManifestChanged`, `AuthorizationDenied`, `IntegrityError`, `ProtocolError`, `LimitExceeded`, `SkillNotFound`, `TransportError`, `ClosedError`, `SnapshotBusy`.
 
 ## Development and verification
 

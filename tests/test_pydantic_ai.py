@@ -121,3 +121,44 @@ async def test_retry_policies_control_model_discovery(distribution):
             assert (await agent.run("retry", deps=retry)).output == "A"
         async with sdk.retry(checkpoint, retry_policy="latest") as retry:
             assert (await agent.run("retry", deps=retry)).output == "B"
+
+
+async def test_snapshot_view_can_be_used_directly_as_agent_deps(distribution):
+    async def model(messages, info):
+        version = re.search('snapshot_id="([^"]+)"', info.instructions)[1]
+        returns = [
+            part
+            for message in messages
+            for part in message.parts
+            if isinstance(part, ToolReturnPart)
+        ]
+        if not returns:
+            catalog = re.search('catalog_digest="([^"]+)"', info.instructions)[1]
+            return ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        "load_skill",
+                        dict(
+                            name="review",
+                            expected_snapshot_id=version,
+                            expected_catalog_digest=catalog,
+                        ),
+                    )
+                ]
+            )
+        assert f'snapshot_id="{version}"' in returns[-1].content
+        return ModelResponse(parts=[TextPart(version)])
+
+    from skiva_sdk import SnapshotView
+
+    agent = Agent(FunctionModel(model), deps_type=SnapshotView, capabilities=[SkivaSkills()])
+    async with SkivaClient(
+        "https://skiva.test", "test-secret", transport=httpx.MockTransport(distribution)
+    ) as sdk:
+        async with sdk.snapshot("job") as fixed:
+            distribution.head = "B"
+            assert (await agent.run("first", deps=fixed)).output == "A"
+        async with sdk.snapshot("job") as retry:
+            assert (await agent.run("retry", deps=retry)).output == "A"
+        async with sdk.snapshot("job", retry_policy="latest") as latest:
+            assert (await agent.run("latest", deps=latest)).output == "B"

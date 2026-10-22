@@ -14,7 +14,7 @@ from pydantic_ai.messages import InstructionPart
 from pydantic_ai.toolsets import FunctionToolset
 
 from ..errors import SkillNotFound, VersionMismatch
-from ..view import SkillSession
+from ..view import SkillSession, SnapshotView
 
 
 class SkivaSkills(AbstractCapability[Any]):
@@ -26,19 +26,24 @@ class SkivaSkills(AbstractCapability[Any]):
 
     id = "skiva-skills"
 
-    def __init__(self, get_session: Callable[[Any], SkillSession] = lambda deps: deps):
+    def __init__(
+        self, get_session: Callable[[Any], SkillSession | SnapshotView] = lambda deps: deps
+    ):
         self._get_session = get_session
 
-    def _session(self, ctx) -> SkillSession:
+    def _session(self, ctx) -> SkillSession | SnapshotView:
         session = self._get_session(ctx.deps)
-        if not isinstance(session, SkillSession):
-            raise TypeError("SkivaSkills requires a SkillSession in run dependencies")
+        if not isinstance(session, (SkillSession, SnapshotView)):
+            raise TypeError(
+                "SkivaSkills requires a SkillSession or SnapshotView in run dependencies"
+            )
         return session
 
     def get_instructions(self):
         async def catalog_instructions(ctx: RunContext[Any]) -> InstructionPart:
             session = self._session(ctx)
-            await session.refresh()
+            if isinstance(session, SkillSession):
+                await session.refresh()
             catalog = await session.catalog()
             return InstructionPart(
                 catalog.render(), name="catalog", dynamic=True, on_change="rewrite"
