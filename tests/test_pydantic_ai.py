@@ -79,7 +79,6 @@ async def test_catalog_replaced_between_model_requests_preserving_history(distri
     async with SkivaClient(
         "https://skiva.test",
         "test-secret",
-        consistency="dynamic",
         transport=httpx.MockTransport(distribution),
     ) as sdk:
         async with sdk.bind() as skills:
@@ -98,8 +97,27 @@ async def test_concurrent_runs_do_not_share_catalog_state(distribution):
     async with SkivaClient(
         "https://skiva.test", "test-secret", transport=httpx.MockTransport(distribution)
     ) as sdk:
-        async with sdk.bind() as a:
+        async with sdk.bind(consistency="pinned") as a:
             distribution.head = "B"
-            async with sdk.bind() as b:
+            async with sdk.bind(consistency="pinned") as b:
                 results = await asyncio.gather(agent.run("A", deps=a), agent.run("B", deps=b))
                 assert [r.output for r in results] == ["A", "B"]
+
+
+async def test_retry_policies_control_model_discovery(distribution):
+    async def model(messages, info):
+        version = re.search('snapshot_id="([^"]+)"', info.instructions)[1]
+        return ModelResponse(parts=[TextPart(version)])
+
+    agent = Agent(FunctionModel(model), capabilities=[SkivaSkills()])
+    async with SkivaClient(
+        "https://skiva.test", "test-secret", transport=httpx.MockTransport(distribution)
+    ) as sdk:
+        async with sdk.bind() as skills:
+            assert (await agent.run("first", deps=skills)).output == "A"
+        checkpoint = skills.retry_checkpoint
+        distribution.head = "B"
+        async with sdk.retry(checkpoint) as retry:
+            assert (await agent.run("retry", deps=retry)).output == "A"
+        async with sdk.retry(checkpoint, retry_policy="latest") as retry:
+            assert (await agent.run("retry", deps=retry)).output == "B"

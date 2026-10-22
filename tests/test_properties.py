@@ -14,7 +14,10 @@ def test_generated_publish_rollback_sequences(sequence):
     async def scenario():
         server = ScenarioServer()
         async with server.client() as client:
-            async with client.bind() as pinned, client.bind(consistency="dynamic") as dynamic:
+            async with (
+                client.bind(consistency="pinned") as pinned,
+                client.bind(consistency="dynamic") as dynamic,
+            ):
                 old_ref = pinned.ref
                 for release in sequence:
                     server.head = release

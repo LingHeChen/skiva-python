@@ -26,7 +26,7 @@ def client(server, **kwargs):
 
 async def test_pinned_rollback_references_and_retry(distribution):
     async with client(distribution) as sdk:
-        async with sdk.bind(task_id="t", attempt_id="1") as skills:
+        async with sdk.bind(task_id="t", attempt_id="1", consistency="pinned") as skills:
             a = await skills.load_skill("review")
             distribution.head = "B"
             assert await skills.read_text("review/references/rules.md") == "old reference"
@@ -65,7 +65,10 @@ async def test_dynamic_batch_and_version_mismatch(distribution):
 
 async def test_permission_change_same_snapshot(distribution):
     async with client(distribution) as sdk:
-        async with sdk.bind() as pinned, sdk.bind(consistency="dynamic") as dynamic:
+        async with (
+            sdk.bind(consistency="pinned") as pinned,
+            sdk.bind(consistency="dynamic") as dynamic,
+        ):
             old = await dynamic.catalog()
             distribution.filter_files("A", lambda p: False)
             with pytest.raises(ManifestChanged):

@@ -38,7 +38,6 @@ async def main():
     async with SkivaClient(
         "https://demo.invalid",
         "demo-only",
-        consistency="dynamic",
         transport=httpx.MockTransport(distribution),
     ) as client:
         async with client.bind(task_id="demo") as skills:
@@ -64,6 +63,12 @@ async def main():
             head = "A"
             await skills.refresh()
             print("Rollback catalog:", (await skills.catalog()).ref.snapshot_id)
+        checkpoint = skills.retry_checkpoint
+        head = "B"
+        async with client.retry(checkpoint) as retry:
+            print("Default retry:", (await retry.catalog()).ref.snapshot_id)  # A
+        async with client.retry(checkpoint, retry_policy="latest") as retry:
+            print("Latest retry:", (await retry.catalog()).ref.snapshot_id)  # B
 
 
 if __name__ == "__main__":

@@ -53,3 +53,7 @@ Remaining deployment acceptance: authenticated actual Skiva backend, real profil
 2026-10-22, macOS ARM64, Python 3.12.10: **102 passed**. Combined statement/branch coverage **95.40%** (523/542 statements, 120/132 branches). Python 3.13.5 also passed all 102 tests in a separate environment. The local Python 3.11 attempt was stopped while downloading dependencies; no 3.11 test result is claimed. The CI matrix retains that version. Catalog rendering/parsing has 100% measured combined coverage. These numbers describe this revision, not a permanent guarantee.
 
 The expanded suite found a real defect: a pinned binding retained `last_refresh_error` after a later successful refresh. The fix clears the error and records the successful check time; the pinned/dynamic recovery regression test covers both policies.
+
+## 0.2.0 retry policy regression
+
+Python 3.12.10 local validation: **118 passed**, combined statement/branch coverage **95.44%**. `test_retry.py` covers dynamic defaults, fixed default retries, latest retries and rollback, client overrides, persisted checkpoints, authorization failures, failed refresh checkpoints, and concurrent attempt isolation. The Pydantic AI tests also verify that retry policy selects the model's discovery catalog. No live model calls are used.

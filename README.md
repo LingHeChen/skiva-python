@@ -2,7 +2,7 @@
 
 English · [简体中文](https://github.com/LingHeChen/skiva-python/blob/main/README.zh-CN.md)
 
-Async Python SDK for Skiva's `/distribution/v1` protocol. Python 3.11+. Package name: `skiva-sdk`; import: `skiva_sdk`. Version: 0.1.0.
+Async Python SDK for Skiva's `/distribution/v1` protocol. Python 3.11+. Package name: `skiva-sdk`; import: `skiva_sdk`. Version: 0.2.0.
 
 [GitHub repository](https://github.com/LingHeChen/skiva-python) · [Skiva server](https://github.com/LingHeChen/skiva)
 
@@ -11,9 +11,9 @@ Async Python SDK for Skiva's `/distribution/v1` protocol. Python 3.11+. Package 
 Install from PyPI:
 
 ```bash
-python -m pip install skiva-sdk==0.1.0
+python -m pip install skiva-sdk==0.2.0
 # Optional framework adapter, tested against exactly Pydantic AI 2.59.0:
-python -m pip install 'skiva-sdk[pydantic-ai]==0.1.0'
+python -m pip install 'skiva-sdk[pydantic-ai]==0.2.0'
 ```
 
 Use a **client credential assigned to an enabled Agent Profile**, not an admin/API session token. Use the server origin (or reverse-proxy prefix), without `/distribution/v1`. Use HTTPS outside a trusted local environment.
@@ -62,15 +62,41 @@ async with client.bind(consistency="dynamic") as skills:
         original_ref = batch.ref
 ```
 
-- Default `pinned`: one snapshot and filtered manifest for the binding. Future channel changes do not change it.
-- Opt-in `dynamic`: reads/discovery reconcile on access after `refresh_interval` (default 5 seconds). `refresh()` forces reconciliation. No background daemon or SSE subscription.
+- Opt-in `pinned`: one snapshot and filtered manifest for the binding. Future channel changes do not change it.
+- Default `dynamic`: reads/discovery reconcile on access after `refresh_interval` (default 5 seconds). `refresh()` forces reconciliation. No background daemon or SSE subscription.
 - An expected-version load forces dynamic reconciliation even before the interval expires. Snapshot or catalog mismatch raises `VersionMismatch`; no silent substitution.
 - A fully verified candidate replaces the active view atomically. Each operation captures one view; different operations can span versions. `snapshot()` captures one view for related operations, even while the enclosing dynamic session updates.
 - Refresh failure aborts that operation and populates `last_refresh_error`; it never silently reports stale discovery as fresh. Later successful refresh clears the error. `transition_count` counts successful view changes.
-- The client default can be overridden per binding. An explicit `source=SnapshotRef` requires pinned mode. Reuse a ref for an explicit retry, subject to current server grants/permissions.
+- The client default can be overridden per binding. An explicit `source=SnapshotRef` selects pinned mode when consistency is omitted; explicitly combining it with dynamic is rejected. Reuse a ref for an explicit retry, subject to current server grants/permissions.
 - `view.ref` in dynamic mode is a point-in-time observation. Use returned `SkillContent.ref` or `batch.ref` for provenance.
 
-Task/attempt IDs are optional correlation fields and auto-generated if absent. Duplicate active IDs are rejected **within one client**. There is no durable attempt store, crash resume or cross-process exactly-once guarantee in v0.1. Persist refs in your application's own storage for explicit pinned retries. A ref does not grant access and cannot bypass a new credential's permissions.
+Task/attempt IDs are optional correlation fields and auto-generated if absent. Duplicate active IDs are rejected **within one client**. There is no durable attempt store, automatic crash resume or cross-process exactly-once guarantee. Persist refs in your application's own storage for explicit pinned retries. A ref does not grant access and cannot bypass a new credential's permissions.
+
+## Retry policy is separate from update policy
+
+Version 0.2.0 changes the client default from pinned to dynamic. Existing applications that need fixed ordinary bindings must pass `consistency="pinned"`. Retry behavior is independently configured with `retry_policy="reuse_snapshot"` (default) or `"latest"`, on the client or on `client.retry()`.
+
+```python
+async with client.bind(task_id="review-42") as skills:
+    catalog = await skills.catalog()
+    # Run your application/agent with this session.
+
+checkpoint = skills.retry_checkpoint
+
+# Default: the checkpoint snapshot stays fixed for the whole retry.
+async with client.retry(checkpoint) as retry:
+    print((await retry.catalog()).render())
+
+# Opt in: resolve the current authorized target and follow the client policy.
+async with client.retry(checkpoint, retry_policy="latest") as retry:
+    print((await retry.catalog()).render())
+```
+
+`retry_checkpoint` is an immutable `RetryCheckpoint(task_id, attempt_id, snapshot)` containing the session's **last fully published view**, not necessarily its initial view. It is available after the binding exits, including when application code raises. Capture and keep it before further updates if you want that specific view. A failed/cancelled refresh does not advance it. A dynamic attempt may have used several versions: one checkpoint does not reproduce its full sequence of reads or model history. For an exact returned content/batch version, construct a checkpoint with that `SkillContent.ref` or `SnapshotView.ref` and the session's IDs.
+
+`client.retry(checkpoint)` keeps the task ID, generates a new attempt ID, revalidates current permissions and fixes the checkpoint snapshot throughout the retry. It never falls back to latest on denied access or a changed manifest. `retry_policy="latest"` resolves the current authorized Profile target (including server pins) and then uses the client's consistency policy, dynamic by default. Each retry can produce its own checkpoint for another retry. The checkpoint records no secrets and grants no access; applications can persist it with `dataclasses.asdict` and reconstruct its nested `SnapshotRef` when loading.
+
+Reusing a task ID with `bind()` does not infer a retry. The SDK does not automatically rerun business actions or retry framework tools; wrap the retry boundary you own. For an application failure, read `skills.retry_checkpoint` in the exception handler after `bind` exits, then explicitly call `client.retry`. A failure before the initial binding is prepared has no usable checkpoint. Choosing latest reloads SDK content, but does not erase historical messages; decide whether to start a fresh model run/context in the application.
 
 ## Pydantic AI integration
 
@@ -96,7 +122,7 @@ async with agent:
 
 Keep business dependencies with `SkivaSkills(get_session=lambda deps: deps.skills)`. Each run must receive its own session; the capability has no mutable run state. Attach one SkivaSkills capability per Agent (tool names are fixed). This is a dedicated discovery/tool integration, **not** a replacement for the native Harness `Skills` workspace backend. Shell/direct filesystem access is not intercepted. Configure application tracing in the host application; the SDK exports no prompts/tokens to an external telemetry service.
 
-An active binding owns both discovery and reads. A pinned binding intentionally advertises its pinned catalog; select dynamic to follow updates within a run. Instructions are not modified while a model request is in flight. Header changes can affect prompt caching.
+An active binding owns both discovery and reads. Bindings follow updates by default. An explicitly pinned binding, including a reuse-snapshot retry, intentionally advertises its fixed catalog. Instructions are not modified while a model request is in flight. Header changes can affect prompt caching.
 
 ## Real files when necessary
 

@@ -21,9 +21,10 @@ from .errors import (
     TransportError,
     VersionMismatch,
 )
-from .protocol import Limits, Manifest, SnapshotRef, digest
+from .protocol import Limits, Manifest, RetryCheckpoint, SnapshotRef, digest
 
 Consistency = Literal["pinned", "dynamic"]
+RetryPolicy = Literal["reuse_snapshot", "latest"]
 
 
 class SkivaClient:
@@ -32,7 +33,8 @@ class SkivaClient:
         server_url: str,
         token: str,
         *,
-        consistency: Consistency = "pinned",
+        consistency: Consistency = "dynamic",
+        retry_policy: RetryPolicy = "reuse_snapshot",
         refresh_interval: float = 5.0,
         timeout: float = 20.0,
         trust_env: bool = False,
@@ -59,12 +61,15 @@ class SkivaClient:
             or timeout <= 0
         ):
             raise ValueError("Invalid consistency or refresh interval")
+        if retry_policy not in ("reuse_snapshot", "latest"):
+            raise ValueError("Unknown retry policy")
+        self.retry_policy = retry_policy
         self.server = server_url.rstrip("/")
         self.consistency = consistency
         self.refresh_interval = refresh_interval
         self.limits = limits or Limits()
         self._http = httpx.AsyncClient(
-            headers={"Authorization": f"Bearer {token}", "User-Agent": "skiva-python/0.1.0"},
+            headers={"Authorization": f"Bearer {token}", "User-Agent": "skiva-python/0.2.0"},
             timeout=timeout,
             transport=transport,
             follow_redirects=False,
@@ -192,7 +197,11 @@ class SkivaClient:
     ):
         from .view import SkillSession
 
-        policy = consistency if consistency is not None else self.consistency
+        policy = (
+            consistency
+            if consistency is not None
+            else ("pinned" if source is not None else self.consistency)
+        )
         if policy not in ("pinned", "dynamic"):
             raise ValueError("Unknown consistency policy")
         if source is not None and policy != "pinned":
@@ -209,6 +218,38 @@ class SkivaClient:
         finally:
             session._closed = True
             self._active.discard(key)
+
+    @asynccontextmanager
+    async def retry(
+        self,
+        previous: RetryCheckpoint,
+        *,
+        retry_policy: RetryPolicy | None = None,
+        attempt_id: str | None = None,
+    ):
+        """Start one retry binding; never execute/replay application actions automatically.
+
+        reuse_snapshot fixes the supplied checkpoint for this entire retry.
+        latest resolves the current authorized target and uses the client consistency.
+        """
+        if not isinstance(previous, RetryCheckpoint):
+            raise TypeError("retry requires a RetryCheckpoint")
+        if previous.snapshot.server != self.server:
+            raise ValueError("RetryCheckpoint belongs to a different server")
+        policy = self.retry_policy if retry_policy is None else retry_policy
+        if policy not in ("reuse_snapshot", "latest"):
+            raise ValueError("Unknown retry policy")
+        attempt = attempt_id if attempt_id is not None else str(uuid4())
+        if not attempt or attempt == previous.attempt_id:
+            raise ValueError("A retry requires a new non-empty attempt ID")
+        reuse = policy == "reuse_snapshot"
+        async with self.bind(
+            task_id=previous.task_id,
+            attempt_id=attempt,
+            source=previous.snapshot if reuse else None,
+            consistency="pinned" if reuse else self.consistency,
+        ) as session:
+            yield session
 
     @asynccontextmanager
     async def snapshot(self, source: SnapshotRef | None = None):

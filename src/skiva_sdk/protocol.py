@@ -69,6 +69,21 @@ class SnapshotRef:
 
 
 @dataclass(frozen=True)
+class RetryCheckpoint:
+    """Explicit retry provenance; contains no credentials or authorization grant."""
+
+    task_id: str
+    attempt_id: str
+    snapshot: SnapshotRef
+
+    def __post_init__(self):
+        if not all(isinstance(v, str) and v for v in (self.task_id, self.attempt_id)):
+            raise ValueError("Checkpoint IDs must be non-empty strings")
+        if not isinstance(self.snapshot, SnapshotRef):
+            raise TypeError("Checkpoint snapshot must be a SnapshotRef")
+
+
+@dataclass(frozen=True)
 class File:
     path: str
     type: str

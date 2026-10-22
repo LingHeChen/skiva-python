@@ -2,7 +2,7 @@
 
 [English](https://github.com/LingHeChen/skiva-python/blob/main/README.md) · 简体中文
 
-基于 Skiva `/distribution/v1` 协议的异步 Python SDK，要求 Python 3.11+。安装包名 `skiva-sdk`，导入名 `skiva_sdk`。当前版本：0.1.0。
+基于 Skiva `/distribution/v1` 协议的异步 Python SDK，要求 Python 3.11+。安装包名 `skiva-sdk`，导入名 `skiva_sdk`。当前版本：0.2.0。
 
 [GitHub 仓库](https://github.com/LingHeChen/skiva-python) · [Skiva 服务端](https://github.com/LingHeChen/skiva)
 
@@ -11,9 +11,9 @@
 从 PyPI 安装：
 
 ```bash
-python -m pip install skiva-sdk==0.1.0
+python -m pip install skiva-sdk==0.2.0
 # 可选框架适配，已针对 Pydantic AI 2.59.0 验证：
-python -m pip install 'skiva-sdk[pydantic-ai]==0.1.0'
+python -m pip install 'skiva-sdk[pydantic-ai]==0.2.0'
 ```
 
 使用**启用的 Agent Profile 所属客户端凭据**，不能使用管理员或登录会话令牌。地址填写服务端地址或反向代理前缀，不包含 `/distribution/v1`。可信本地环境之外使用 HTTPS。
@@ -62,15 +62,41 @@ async with client.bind(consistency="dynamic") as skills:
         original_ref = batch.ref
 ```
 
-- 默认 `pinned`：绑定期间固定快照与过滤清单，通道变化不影响当前版本。
-- 可选 `dynamic`：访问时按 `refresh_interval` 检查更新，默认 5 秒；`refresh()` 强制刷新。没有后台守护任务或 SSE 订阅。
+- 可选 `pinned`：绑定期间固定快照与过滤清单，通道变化不影响当前版本。
+- 默认 `dynamic`：访问时按 `refresh_interval` 检查更新，默认 5 秒；`refresh()` 强制刷新。没有后台守护任务或 SSE 订阅。
 - 带预期版本的动态加载会强制检查更新，不等待轮询间隔。快照或目录摘要不一致时抛出 `VersionMismatch`，不静默替换。
 - 新视图完整下载校验后原子发布。单次操作捕获一个版本，不同操作可能跨版本。`snapshot()` 为关联读取固定视图，即使外围动态会话继续更新也保持不变。
 - 刷新失败会使该操作失败，并设置 `last_refresh_error`，不把旧目录冒充最新目录。成功刷新后清除错误，`transition_count` 记录成功切换次数。
-- 可以设置客户端默认策略，并在绑定时覆盖。显式 `source=SnapshotRef` 要求固定策略，可用于明确的原版本重试，但仍需满足当前服务端授权。
+- 可以设置客户端默认策略，并在绑定时覆盖。显式 `source=SnapshotRef` 在未指定策略时自动选择固定策略，与显式动态策略组合会被拒绝，可用于明确的原版本重试，但仍需满足当前服务端授权。
 - 动态模式的 `view.ref` 只代表观察瞬间。追踪实际读取来源应使用返回的 `SkillContent.ref` 或 `batch.ref`。
 
-任务和执行 ID 仅作关联，可省略并自动生成。只在**同一个客户端实例内**拒绝重复的活动 ID。0.1 没有持久化执行存储、崩溃恢复或跨进程恰好执行一次保证。应用可自行持久化 ref，用于显式固定版本重试；ref 不授予权限，也不能绕过新凭据的权限。
+任务和执行 ID 仅作关联，可省略并自动生成。只在**同一个客户端实例内**拒绝重复的活动 ID。没有持久化执行存储、自动崩溃恢复或跨进程恰好执行一次保证。应用可自行持久化 ref，用于显式固定版本重试；ref 不授予权限，也不能绕过新凭据的权限。
+
+## 重试策略与更新策略独立
+
+0.2.0 将客户端默认策略从 pinned 改为 dynamic。需要普通绑定固定版本的现有应用，请显式传入 `consistency="pinned"`。重试策略独立配置为 `retry_policy="reuse_snapshot"`（默认）或 `"latest"`，可设置客户端默认值，也可在 `client.retry()` 中覆盖。
+
+```python
+async with client.bind(task_id="review-42") as skills:
+    catalog = await skills.catalog()
+    # 使用当前会话执行应用或 Agent。
+
+checkpoint = skills.retry_checkpoint
+
+# 默认：整个重试期间固定检查点中的快照。
+async with client.retry(checkpoint) as retry:
+    print((await retry.catalog()).render())
+
+# 可选：获取当前授权目标，再遵循客户端更新策略。
+async with client.retry(checkpoint, retry_policy="latest") as retry:
+    print((await retry.catalog()).render())
+```
+
+`retry_checkpoint` 是不可变的 `RetryCheckpoint(task_id, attempt_id, snapshot)`，记录会话**最后一次完整切换成功的视图**，不一定是首次绑定的版本。退出绑定后仍可获取，包括应用抛出异常的情况。若需复用某个特定视图，应在后续更新之前保存检查点。刷新失败或取消不会推进检查点。动态执行可能读取过多个版本，一个检查点不能重现整个读取序列或模型历史。若要重试某次返回内容或批次的准确版本，可使用该 `SkillContent.ref` 或 `SnapshotView.ref`，结合会话的任务与执行 ID 构造检查点。
+
+`client.retry(checkpoint)` 保留任务 ID、生成新的执行 ID、重新校验当前权限，并在整个重试期间固定检查点快照。权限拒绝或清单变化时失败，不自动降级使用最新版本。`retry_policy="latest"` 获取当前 Profile 授权目标（仍遵守服务端固定配置），之后使用客户端更新策略，默认为动态。每次重试也可以生成检查点，用于下一次重试。检查点没有凭据，不授予权限；应用可通过 `dataclasses.asdict` 持久化，恢复时重建嵌套的 `SnapshotRef`。
+
+使用相同任务 ID 再次调用 `bind()` 不会自动推断为重试。SDK 不会自动重放业务动作或重试框架工具，需由应用在自己的重试边界调用。应用异常时，在退出 `bind` 后的异常处理器中读取 `skills.retry_checkpoint`，再显式调用 `client.retry`。首次绑定准备失败时没有可用检查点。选择最新版本会重新加载 SDK 内容，但不会清除历史消息；是否新建模型 run 或上下文由应用决定。
 
 ## Pydantic AI 集成
 
@@ -96,7 +122,7 @@ async with agent:
 
 通过 `SkivaSkills(get_session=lambda deps: deps.skills)` 保留业务依赖。每个 run 应使用独立会话；适配器不保存跨 run 的可变状态。一个 Agent 只挂载一个 SkivaSkills（工具名称固定）。这是独立发现和加载工具集成，**不是**原生 Harness `Skills` 的工作区后端，也不拦截 shell 或直接文件访问。追踪由宿主应用配置，SDK 不向外部遥测服务发送提示词或令牌。
 
-发现和读取共享一个绑定。固定绑定始终展示固定目录；需要执行中更新时选择动态策略。已发出的模型请求不会被修改，更新指令前缀可能影响提示词缓存。
+发现和读取共享一个绑定。普通绑定默认动态更新；显式固定绑定及复用快照的重试始终展示固定目录。已发出的模型请求不会被修改，更新指令前缀可能影响提示词缓存。
 
 ## 需要真实文件时
 

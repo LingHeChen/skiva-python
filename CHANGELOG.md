@@ -2,6 +2,13 @@
 
 English · [简体中文](CHANGELOG.zh-CN.md)
 
+## 0.2.0 — 2026-10-22
+
+- Behavior change: ordinary bindings now default to dynamic updates; opt into pinned explicitly.
+- Independent retry policy: reuse the supplied snapshot by default, or resolve latest explicitly.
+- Immutable retry checkpoints survive binding exit and preserve task/attempt/snapshot provenance.
+- Explicit snapshot sources still select pinned mode; retries enforce current authorization.
+
 ## 0.1.0 — 2026-10-22
 
 - Async distribution/v1 client with immutable manifests and SHA-256 verification.

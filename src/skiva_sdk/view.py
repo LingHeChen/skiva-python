@@ -23,7 +23,7 @@ from .errors import (
     SkillNotFound,
     VersionMismatch,
 )
-from .protocol import Manifest, SnapshotRef
+from .protocol import Manifest, RetryCheckpoint, SnapshotRef
 
 if TYPE_CHECKING:
     from .client import SkivaClient
@@ -193,6 +193,18 @@ class SkillSession:
     def ref(self) -> SnapshotRef:
         self._check()
         return self._current.ref
+
+    @property
+    def retry_checkpoint(self) -> RetryCheckpoint:
+        """Capture the last fully published view, including after bind exits.
+
+        Access does not refresh or authorize. Save this value to select a view
+        for a later retry. It does not freeze
+        subsequent dynamic reads; reading it after exit captures the final view.
+        """
+        if self._current is None:
+            raise ClosedError("Binding has no prepared snapshot")
+        return RetryCheckpoint(self.task_id, self.attempt_id, self._current.ref)
 
     def _check(self):
         self._client._check()

@@ -1,7 +1,7 @@
 """Skiva Python SDK: versioned Skill discovery and reads."""
 
 from .catalog import Catalog, Skill, SkillContent
-from .client import Consistency, SkivaClient
+from .client import Consistency, RetryPolicy, SkivaClient
 from .errors import (
     AuthorizationDenied,
     ClosedError,
@@ -14,7 +14,7 @@ from .errors import (
     TransportError,
     VersionMismatch,
 )
-from .protocol import Limits, SnapshotRef
+from .protocol import Limits, RetryCheckpoint, SnapshotRef
 from .view import SkillSession, SnapshotView
 
 __all__ = [
@@ -27,6 +27,8 @@ __all__ = [
     "Limits",
     "ManifestChanged",
     "ProtocolError",
+    "RetryCheckpoint",
+    "RetryPolicy",
     "SkivaClient",
     "SkivaError",
     "Skill",
