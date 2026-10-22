@@ -1,0 +1,1 @@
+{"revision": "release-2", "breaking_change": "blocking", "required": ["auth", "rollback", "migration"]}
